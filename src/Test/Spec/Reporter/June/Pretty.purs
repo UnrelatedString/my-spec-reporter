@@ -24,6 +24,7 @@ import Data.Array as Array
 import Data.String as String
 import Control.Monad.State (class MonadState, StateT, get, modify)
 import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor, execWriterT)
+import Control.Monad.Trans.Class (lift)
 import Data.Unfoldable (replicate)
 import Data.Unfoldable.Trivial ((::<*>)) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
 import Data.Foldable (fold)
@@ -39,10 +40,10 @@ prettyReporter = defaultReporter initialState $ defaultUpdate
  , update
  }
 
-type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: String }
+type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: Writer String Unit }
 
 initialState :: PrettyState
-initialState = { runningItems: Map.empty, undoLastSequential: "" }
+initialState = { runningItems: Map.empty, undoLastSequential: pure unit }
 
 getRunningItems :: PrettyState -> Map TestLocator RunningItem
 getRunningItems state = state.runningItems
@@ -66,21 +67,20 @@ update (Event.Suite Sequential locator) = pure unit
 update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
 update (Event.SuiteEnd locator) = pure unit
 update (Event.Test Sequential locator) = do
-  indent locator
+  tell $ indent locator
   untell <- backspace $ formatTest locator Nothing
-  untell' <- execWriterT untell
-  modify _{undoLastSequential = untell'}
+  modify _{undoLastSequential = untell}
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
-  tell $ state.undoLastSequential
+  lift $ state.undoLastSequential
   formatTest locator $ Just result
   tellLn ""
 update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
-indent :: forall m. MonadTell String m => TestLocator -> m Unit
-indent (path /\ _) = tell $ fold ::<*> replicate (Array.length path) "| "
+indent :: TestLocator -> String
+indent (path /\ _) = fold ::<*> replicate (Array.length path) "| "
 
 styled :: String -> NonEmpty List GraphicsParam -> String
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -89,8 +89,7 @@ styled s = (_ <> s <> clearFormatting) <<< ANSI.escapeCodeToString <<< ANSI.Grap
 clearFormatting :: String
 clearFormatting = ANSI.graphicsParamToString Reset <> ANSI.graphicsParamToString (PBackground ANSI.Black)
 
--- Intended originally to save something to overwrite with later...
-backspace :: forall m. MonadWriter String m => m Unit -> m (m Unit)
+backspace :: forall m n. MonadWriter String m => MonadWriter String n => m Unit -> m (n Unit)
 backspace action = do
   _ /\ s <- listen action
   pure $ tell $ fold ::<*> replicate (String.length s) "\x08"
