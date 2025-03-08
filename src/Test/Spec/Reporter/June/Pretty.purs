@@ -44,16 +44,19 @@ putRunningItems items state = state{ runningItems = items }
 
 printFinishedItem :: TestLocator -> RunningItem -> StateT PrettyState (Writer String) Unit
 printFinishedItem (path /\ name) = case _ of
-  RunningTest (Just result) -> tellLn $ show path <> "." <> name <> " finished with result: " <> show result
-  RunningTest Nothing -> tellLn $ show path <> "." <> name <> " didn't finish. I have no idea what this means ;_;"
-  RunningPending -> tellLn $ show path <> "." <> name <> "is pending :/"
-  RunningSuite finished -> tellLn $ show path <> "." <> name <> " finished!... " <> show finished
+  RunningTest (Just result) -> tellLn $ showPN path name <> " finished with result: " <> show result
+  RunningTest Nothing -> tellLn $ showPN path name <> " didn't finish. I have no idea what this means ;_;"
+  RunningPending -> tellLn $ showPN path name <> "is pending :/"
+  RunningSuite finished -> tellLn $ showPN path name <> " finished!... " <> show finished
 
 update :: Event -> StateT PrettyState (Writer String) Unit
-update (Event.Start nTests) = pure unit
-update (Event.Suite exec (path /\ name)) = pure unit
-update (Event.SuiteEnd (path /\ name)) = pure unit
-update (Event.Test exec (path /\ name)) = pure unit
-update (Event.TestEnd (path /\ name) result) = pure unit
-update (Event.Pending (path /\ name)) = pure unit
-update (Event.End resultTrees) = defaultSummary resultTrees
+update = tellLn <<< show
+-- update (Event.Start nTests) = pure unit
+-- update (Event.Suite exec (path /\ name)) = pure unit
+-- update (Event.SuiteEnd (path /\ name)) = pure unit
+-- update (Event.Test exec (path /\ name)) = pure unit
+-- update (Event.TestEnd (path /\ name) result) = pure unit
+-- update (Event.Pending (path /\ name)) = pure unit
+-- update (Event.End resultTrees) = defaultSummary resultTrees
+
+showPN path name = show path <> "." <> name
