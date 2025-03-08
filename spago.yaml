@@ -6,6 +6,8 @@ package:
     - prelude
     - spec
     - spec-node
+    - datetime
+    - aff
   test:
     main: Test.Main
     dependencies: []

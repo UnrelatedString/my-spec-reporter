@@ -5,7 +5,9 @@
         "path": "./",
         "core": {
           "dependencies": [
+            "aff",
             "console",
+            "datetime",
             "effect",
             "prelude",
             "spec",
