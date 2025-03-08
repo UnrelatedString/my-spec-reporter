@@ -42,6 +42,8 @@ prettyReporter = defaultReporter initialState $ defaultUpdate
 
 type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: Writer String Unit }
 
+type PrettyAction = StateT PrettyState (Writer String) Unit
+
 initialState :: PrettyState
 initialState = { runningItems: Map.empty, undoLastSequential: pure unit }
 
@@ -51,7 +53,7 @@ getRunningItems state = state.runningItems
 putRunningItems :: Map TestLocator RunningItem -> PrettyState -> PrettyState
 putRunningItems items state = state{ runningItems = items }
 
-printFinishedItem :: TestLocator -> RunningItem -> StateT PrettyState (Writer String) Unit
+printFinishedItem :: TestLocator -> RunningItem -> PrettyAction
 printFinishedItem locator = case _ of
   RunningTest (Just result) -> pure unit
   RunningTest Nothing -> pure unit
@@ -61,13 +63,13 @@ printFinishedItem locator = case _ of
 letDefaultUpdateHandleThis :: forall m. Applicative m => m Unit
 letDefaultUpdateHandleThis = pure unit
 
-update :: Event -> StateT PrettyState (Writer String) Unit
+update :: Event -> PrettyAction
 update (Event.Start nTests) = tellLn $ "Running " <> show nTests <> " tests..."
 update (Event.Suite Sequential locator) = pure unit
 update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
 update (Event.SuiteEnd locator) = pure unit
 update (Event.Test Sequential locator) = do
-  tell $ indent locator
+  indent locator
   untell <- backspace $ formatTest locator Nothing
   modify _{undoLastSequential = untell}
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
@@ -79,8 +81,8 @@ update (Event.TestEnd locator result) = do
 update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
-indent :: TestLocator -> String
-indent (path /\ _) = fold ::<*> replicate (Array.length path) "| "
+indent :: TestLocator -> PrettyAction
+indent (path /\ _) = tell $ fold ::<*> replicate (Array.length path) "| "
 
 styled :: String -> NonEmpty List GraphicsParam -> String
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -89,24 +91,24 @@ styled s = (_ <> s <> clearFormatting) <<< ANSI.escapeCodeToString <<< ANSI.Grap
 clearFormatting :: String
 clearFormatting = ANSI.graphicsParamToString Reset <> ANSI.graphicsParamToString (PBackground ANSI.Black)
 
-backspace :: forall m n. MonadWriter String m => MonadWriter String n => m Unit -> m (n Unit)
+backspace :: forall m. MonadWriter String m => m Unit -> m (Writer String Unit)
 backspace action = do
   _ /\ s <- listen action
   pure $ tell $ fold ::<*> replicate (String.length s) "\x08"
 
-formatTest :: forall m. MonadTell String m => TestLocator -> Maybe Result -> m Unit
+formatTest :: TestLocator -> Maybe Result -> PrettyAction
 formatTest (_ /\ name) r = do
   formatTestResultIndicator r
   tell $ name `styled` (PForeground ANSI.White :| Nil)
   formatTestResultSuffix r
 
-formatTestResultIndicator :: forall m. MonadTell String m => Maybe Result -> m Unit
+formatTestResultIndicator :: Maybe Result -> PrettyAction
 formatTestResultIndicator = const (tell " ") <=< tell <<< case _ of
   Just (Success _ _) -> "✓" `styled` (PForeground ANSI.BrightGreen :| Nil)
   Just (Failure _)   -> "✗" `styled` (PForeground ANSI.BrightRed :| PBackground ANSI.BrightWhite : Nil)
   Nothing            -> "-" `styled` (PForeground ANSI.White :| PMode ANSI.Dim : Nil)
 
-formatTestResultSuffix :: forall m. MonadTell String m => Maybe Result -> m Unit
+formatTestResultSuffix :: Maybe Result -> PrettyAction
 formatTestResultSuffix = const (tell " ") <=< tell <<< case _ of
   Just (Success _ _) -> "... passed" `styled` (PForeground ANSI.White :| Nil)
   Just (Failure _)   -> "... failed!" `styled` (PForeground ANSI.Red :| Nil)
