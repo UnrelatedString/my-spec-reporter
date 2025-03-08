@@ -33,7 +33,7 @@ import Data.List ((:), List(Nil))
 import Data.NonEmpty (NonEmpty, (:|))
 
 prettyReporter :: Reporter
-prettyReporter = defaultReporter initialState $ censor show <<< defaultUpdate
+prettyReporter = defaultReporter initialState $ defaultUpdate
  { getRunningItems
  , printFinishedItem
  , putRunningItems
@@ -75,7 +75,8 @@ update (Event.Test Sequential locator) = do
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
-  -- lift $ state.undoLastSequential
+  lift $ state.undoLastSequential
+  indent locator
   formatTest locator $ Just result
   tellLn ""
 update (Event.Pending locator) = pure unit
@@ -89,7 +90,7 @@ styled :: String -> NonEmpty List GraphicsParam -> String
 styled s = (_ <> s <> clearFormatting) <<< ANSI.escapeCodeToString <<< ANSI.Graphics <<< NonEmptyList
 
 clearFormatting :: String
-clearFormatting = ANSI.graphicsParamToString Reset <> ANSI.graphicsParamToString (PBackground ANSI.Black)
+clearFormatting = ANSI.escapeCodeToString $ ANSI.Graphics $ NonEmptyList $ ANSI.Reset :| Nil
 
 backspace :: forall m. MonadWriter String m => m Unit -> m (Writer String Unit)
 backspace action = do
