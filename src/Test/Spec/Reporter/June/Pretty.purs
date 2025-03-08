@@ -59,11 +59,14 @@ putRunningItems items state = state{ runningItems = items }
 printFinishedItem :: TestLocator -> RunningItem -> PrettyAction
 printFinishedItem locator = case _ of
   RunningTest (Just result) -> do
+    commit $ indent locator
     commit $ formatTest locator $ Just result
     tellLn ""
   RunningTest Nothing -> pure unit
   RunningPending -> pure unit
-  RunningSuite finished -> formatSuite locator
+  RunningSuite finished -> do
+    commit $ indent locator
+    formatSuite locator
 
 letDefaultUpdateHandleThis :: forall m. Applicative m => m Unit
 letDefaultUpdateHandleThis = pure unit
@@ -87,7 +90,9 @@ update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
 indent :: TestLocator -> UndoablePrint
-indent (path /\ _) = (fold ::<*> replicate (Array.length path) "| ") `styled` (PForeground ANSI.BrightWhite : PMode ANSI.Dim : Nil)
+indent (path /\ _) = do
+  (fold ::<*> replicate (Array.length path) "  | ") `styled` (PForeground ANSI.BrightMagenta : Nil)
+  "- " `styled` Nil
 
 styled :: String -> List GraphicsParam -> UndoablePrint
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -128,18 +133,18 @@ formatTest (_ /\ name) r = do
 formatTestResultIndicator :: Maybe Result -> UndoablePrint
 formatTestResultIndicator = const (" " `styled` Nil) <=< case _ of
   Just (Success _ _) -> "✓" `styled` (PForeground ANSI.BrightGreen : Nil)
-  Just (Failure _)   -> "✗" `styled` (PForeground ANSI.BrightRed : PBackground ANSI.BrightWhite : Nil)
+  Just (Failure _)   -> "✗" `styled` (PForeground ANSI.Black : PBackground ANSI.BrightRed : Nil)
   Nothing            -> "-" `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
 
 formatTestResultSuffix :: Maybe Result -> UndoablePrint
 formatTestResultSuffix = case _ of
-  Just (Success _ _) -> " passed" `styled` Nil
-  Just (Failure _)   -> " failed!" `styled` (PForeground ANSI.Red : Nil)
+  Just (Success _ _) -> " passed" `styled` (PForeground ANSI.Green : Nil)
+  Just (Failure _)   -> " failed!" `styled` (PForeground ANSI.BrightRed : PMode ANSI.Underline : Nil)
   Nothing            -> pure unit
 
 formatSuite :: TestLocator -> PrettyAction
 formatSuite locator = do
   commit $ indent locator
   commit $ "Suite " `styled` Nil
-  commit $ snd locator `styled` (PForeground ANSI.BrightCyan : Nil)
+  commit $ snd locator `styled` (PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil)
   commit $ ":\n" `styled` Nil
