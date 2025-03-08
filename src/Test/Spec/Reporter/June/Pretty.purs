@@ -39,10 +39,10 @@ prettyReporter = defaultReporter initialState $ defaultUpdate
  , update
  }
 
-type PrettyState = { runningItems :: Map TestLocator RunningItem }
+type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: forall m. MonadTell String m => m Unit }
 
 initialState :: PrettyState
-initialState = { runningItems: Map.empty }
+initialState = { runningItems: Map.empty, undoLastSequential: pure unit }
 
 getRunningItems :: PrettyState -> Map TestLocator RunningItem
 getRunningItems state = state.runningItems
@@ -67,10 +67,13 @@ update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
 update (Event.SuiteEnd locator) = pure unit
 update (Event.Test Sequential locator) = do
   indent locator
-  formatTest locator Nothing
+  untell <- backspace $ formatTest locator Nothing
+  modify _{undoLastSequential = untell}
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
-  inPlace $ formatTest locator $ Just result
+  state <- get
+  state.undoLastSequential
+  formatTest locator $ Just result
   tellLn ""
 update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
@@ -83,7 +86,7 @@ styled :: String -> NonEmpty List GraphicsParam -> String
 styled s = (_ <> s <> clearFormatting) <<< ANSI.escapeCodeToString <<< ANSI.Graphics <<< NonEmptyList
 
 clearFormatting :: String
-clearFormatting = ANSI.graphicsParamToString Reset
+clearFormatting = ANSI.graphicsParamToString Reset <> ANSI.graphicsParamToString (PBackground ANSI.Black)
 
 -- Intended originally to save something to overwrite with later...
 backspace :: forall m. MonadWriter String m => m Unit -> m (m Unit)
@@ -91,22 +94,20 @@ backspace action = do
   _ /\ s <- listen action
   pure $ tell $ fold ::<*> replicate (String.length s) "\x08"
 
--- ...but can also be contorted into overwriting something of the same length on the spot
-inPlace :: forall m. MonadWriter String m => m Unit -> m Unit
-inPlace action = do
-  join $ censor (const "") $ backspace action
-  action
-
-sequentialInProgress :: forall m. MonadTell String m => m Unit
-sequentialInProgress = tell " ..."
-
 formatTest :: forall m. MonadTell String m => TestLocator -> Maybe Result -> m Unit
 formatTest (_ /\ name) r = do
   formatTestResultIndicator r
   tell $ name `styled` (PForeground ANSI.White :| Nil)
+  formatTestResultSuffix r
 
 formatTestResultIndicator :: forall m. MonadTell String m => Maybe Result -> m Unit
 formatTestResultIndicator = const (tell " ") <=< tell <<< case _ of
   Just (Success _ _) -> "✓" `styled` (PForeground ANSI.BrightGreen :| Nil)
   Just (Failure _)   -> "✗" `styled` (PForeground ANSI.BrightRed :| PBackground ANSI.BrightWhite : Nil)
   Nothing            -> "-" `styled` (PForeground ANSI.White :| PMode ANSI.Dim : Nil)
+
+formatTestResultSuffix :: forall m. MonadTell String m => Maybe Result -> m Unit
+formatTestResultSuffix = const (tell " ") <=< tell <<< case _ of
+  Just (Success _ _) -> "... passed" `styled` (PForeground ANSI.White :| Nil)
+  Just (Failure _)   -> "... failed!" `styled` (PForeground ANSI.Red :| Nil)
+  Nothing            -> "..." `styled` (PForeground ANSI.White :| Nil)
