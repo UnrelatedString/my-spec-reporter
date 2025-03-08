@@ -33,7 +33,7 @@ import Data.List ((:), List(Nil))
 import Data.NonEmpty (NonEmpty, (:|))
 
 prettyReporter :: Reporter
-prettyReporter = defaultReporter initialState $ defaultUpdate
+prettyReporter = defaultReporter initialState $ censor show <<< defaultUpdate
  { getRunningItems
  , printFinishedItem
  , putRunningItems
@@ -75,7 +75,7 @@ update (Event.Test Sequential locator) = do
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
-  lift $ state.undoLastSequential
+  -- lift $ state.undoLastSequential
   formatTest locator $ Just result
   tellLn ""
 update (Event.Pending locator) = pure unit
