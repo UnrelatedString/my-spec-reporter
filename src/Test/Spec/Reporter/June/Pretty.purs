@@ -13,7 +13,7 @@ import Test.Spec.Runner (Reporter)
 import Test.Spec.Runner.Event (Event, Execution(..))
 import Test.Spec.Runner.Event as Event
 import Test.Spec.Speed as Speed
-import Test.Spec.Tree (Path, Tree, TestLocator, parentSuiteName)
+import Test.Spec.Tree (Path, Tree, TestLocator, bimapTreeWithPaths)
 import Ansi.Codes (GraphicsParam(..))
 import Ansi.Codes as ANSI
 import Data.Tuple (snd)
@@ -22,6 +22,7 @@ import Data.Maybe (Maybe(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Array as Array
+import Data.Array.NonEmpty (NonEmptyArray)
 import Data.String as String
 import Control.Monad.State (class MonadState, StateT, get, modify, put, execStateT)
 import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor, execWriter, runWriter)
@@ -33,6 +34,7 @@ import Data.List.NonEmpty (NonEmptyList(..))
 import Data.List ((:), List(Nil))
 import Data.NonEmpty (NonEmpty, (:|))
 import Data.Monoid.Additive (Additive(..))
+import Data.Traversable (traverse_, sequence_)
 
 prettyReporter :: Reporter
 prettyReporter = defaultReporter initialState $ defaultUpdate
@@ -90,7 +92,9 @@ update (Event.TestEnd locator result) = do
       commit $ formatTest locator $ Just result
       tellLn ""
 update (Event.Pending locator) = formatPending locator
-update (Event.End resultTrees) = defaultSummary resultTrees
+update (Event.End resultTrees) = do
+  callOutSlowTests resultTrees
+  defaultSummary resultTrees
 
 indent :: TestLocator -> UndoablePrint
 indent (path /\ _) = do
@@ -158,3 +162,9 @@ formatPending locator = do
   commit $ indent locator
   commit $ snd locator `styled` (PForeground ANSI.BrightWhite : Nil)
   commit $ " is unimplemented\n" `styled` (PForeground ANSI.BrightYellow : Nil)
+
+-- why do the type variables get flipped around in the docs at random...
+callOutSlowTests :: Array (Tree String Void Result) -> PrettyAction
+callOutSlowTests = traverse_ $ sequence_ <<< bimapTreeWithPaths (flip const) vibeCheck
+  where vibeCheck :: NonEmptyArray String -> Result -> PrettyAction
+        vibeCheck _ _ = pure unit
