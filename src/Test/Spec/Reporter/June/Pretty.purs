@@ -16,6 +16,7 @@ import Test.Spec.Speed as Speed
 import Test.Spec.Tree (Path, Tree, TestLocator, parentSuiteName)
 import Ansi.Codes (GraphicsParam(..))
 import Ansi.Codes as ANSI
+import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Maybe (Maybe(..))
 import Data.Map (Map)
@@ -57,24 +58,26 @@ putRunningItems items state = state{ runningItems = items }
 
 printFinishedItem :: TestLocator -> RunningItem -> PrettyAction
 printFinishedItem locator = case _ of
-  RunningTest (Just result) -> pure unit
+  RunningTest (Just result) -> do
+    commit $ formatTest locator $ Just result
+    tellLn ""
   RunningTest Nothing -> pure unit
   RunningPending -> pure unit
-  RunningSuite finished -> pure unit
+  RunningSuite finished -> formatSuite locator
 
 letDefaultUpdateHandleThis :: forall m. Applicative m => m Unit
 letDefaultUpdateHandleThis = pure unit
 
 update :: Event -> PrettyAction
 update (Event.Start nTests) = tellLn $ "Running " <> show nTests <> " tests..."
-update (Event.Suite Sequential locator) = pure unit
-update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
-update (Event.SuiteEnd locator) = pure unit
+update (Event.Suite Sequential locator) = formatSuite locator
+update (Event.Suite Parallel _locator) = letDefaultUpdateHandleThis
+update (Event.SuiteEnd _locator) = pure unit
 update (Event.Test Sequential locator) = do
   commit $ indent locator
   untell <- backspace $ formatTest locator Nothing
   void $ modify _{undoLastSequential = untell}
-update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
+update (Event.Test Parallel _locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
   lift $ state.undoLastSequential
@@ -118,7 +121,8 @@ commit print = do
 formatTest :: TestLocator -> Maybe Result -> UndoablePrint
 formatTest (_ /\ name) r = do
   formatTestResultIndicator r
-  name `styled` (PForeground ANSI.White : Nil)
+  name `styled` (PForeground ANSI.BrightWhite : Nil)
+  "..." `styled` (PForeground ANSI.White : Nil)
   formatTestResultSuffix r
 
 formatTestResultIndicator :: Maybe Result -> UndoablePrint
@@ -129,6 +133,13 @@ formatTestResultIndicator = const (" " `styled` Nil) <=< case _ of
 
 formatTestResultSuffix :: Maybe Result -> UndoablePrint
 formatTestResultSuffix = case _ of
-  Just (Success _ _) -> "... passed" `styled` (PForeground ANSI.White : Nil)
-  Just (Failure _)   -> "... failed!" `styled` (PForeground ANSI.Red : Nil)
-  Nothing            -> "..." `styled` (PForeground ANSI.White : Nil)
+  Just (Success _ _) -> " passed" `styled` (PForeground ANSI.White : Nil)
+  Just (Failure _)   -> " failed!" `styled` (PForeground ANSI.Red : Nil)
+  Nothing            -> pure unit
+
+formatSuite :: TestLocator -> PrettyAction
+formatSuite locator = do
+  commit $ indent locator
+  commit $ "Suite " `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
+  commit $ snd locator `styled` (PForeground ANSI.BrightWhite : Nil)
+  commit $ ":\n" `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
