@@ -23,7 +23,7 @@ import Data.Map as Map
 import Data.Array as Array
 import Data.String as String
 import Control.Monad.State (class MonadState, StateT, get, modify)
-import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor)
+import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor, execWriterT)
 import Data.Unfoldable (replicate)
 import Data.Unfoldable.Trivial ((::<*>)) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
 import Data.Foldable (fold)
@@ -39,10 +39,10 @@ prettyReporter = defaultReporter initialState $ defaultUpdate
  , update
  }
 
-type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: forall m. MonadTell String m => m Unit }
+type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: String }
 
 initialState :: PrettyState
-initialState = { runningItems: Map.empty, undoLastSequential: pure unit }
+initialState = { runningItems: Map.empty, undoLastSequential: "" }
 
 getRunningItems :: PrettyState -> Map TestLocator RunningItem
 getRunningItems state = state.runningItems
@@ -68,11 +68,11 @@ update (Event.SuiteEnd locator) = pure unit
 update (Event.Test Sequential locator) = do
   indent locator
   untell <- backspace $ formatTest locator Nothing
-  modify _{undoLastSequential = untell}
+  modify _{undoLastSequential = execWriterT untell}
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
-  state.undoLastSequential
+  tell state.undoLastSequential
   formatTest locator $ Just result
   tellLn ""
 update (Event.Pending locator) = pure unit
