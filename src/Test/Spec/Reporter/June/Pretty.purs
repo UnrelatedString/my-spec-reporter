@@ -87,7 +87,7 @@ update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
 indent :: TestLocator -> UndoablePrint
-indent (path /\ _) = (fold ::<*> replicate (Array.length path) "| ") `styled` (PForeground ANSI.White : Nil)
+indent (path /\ _) = (fold ::<*> replicate (Array.length path) "| ") `styled` (PForeground ANSI.BrightWhite : PMode ANSI.Dim : Nil)
 
 styled :: String -> List GraphicsParam -> UndoablePrint
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -133,13 +133,13 @@ formatTestResultIndicator = const (" " `styled` Nil) <=< case _ of
 
 formatTestResultSuffix :: Maybe Result -> UndoablePrint
 formatTestResultSuffix = case _ of
-  Just (Success _ _) -> " passed" `styled` (PForeground ANSI.White : Nil)
+  Just (Success _ _) -> " passed" `styled` Nil
   Just (Failure _)   -> " failed!" `styled` (PForeground ANSI.Red : Nil)
   Nothing            -> pure unit
 
 formatSuite :: TestLocator -> PrettyAction
 formatSuite locator = do
   commit $ indent locator
-  commit $ "Suite " `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
-  commit $ snd locator `styled` (PForeground ANSI.BrightWhite : Nil)
-  commit $ ":\n" `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
+  commit $ "Suite " `styled` Nil
+  commit $ snd locator `styled` (PForeground ANSI.BrightCyan : Nil)
+  commit $ ":\n" `styled` Nil
