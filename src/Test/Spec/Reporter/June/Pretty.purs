@@ -22,7 +22,7 @@ import Data.Maybe (Maybe(..))
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Array as Array
-import Data.Array.NonEmpty (NonEmptyArray)
+import Data.Array.NonEmpty (NonEmptyArray, unsnoc)
 import Data.String as String
 import Control.Monad.State (class MonadState, StateT, get, modify, put, execStateT)
 import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor, execWriter, runWriter)
@@ -35,6 +35,7 @@ import Data.List ((:), List(Nil))
 import Data.NonEmpty (NonEmpty, (:|))
 import Data.Monoid.Additive (Additive(..))
 import Data.Traversable (traverse_, sequence_)
+import Data.Number.Format (toStringWith, fixed)
 
 prettyReporter :: Reporter
 prettyReporter = defaultReporter initialState $ defaultUpdate
@@ -110,6 +111,12 @@ styled s Nil = tell $ Additive (String.length s) /\ s
 clearFormatting :: String
 clearFormatting = ANSI.escapeCodeToString $ ANSI.Graphics $ NonEmptyList $ ANSI.Reset :| Nil
 
+testNameStyle :: List GraphicsParam
+testNameStyle = PForeground ANSI.BrightWhite : Nil
+
+suiteNameStyle :: List GraphicsParam
+suiteNameStyle = PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil
+
 -- why do I feel like there's a way simpler canonical way to do this
 writeStatefullyOrSomething :: forall s w m. Monoid w => Monad m => StateT s (Writer w) Unit -> StateT s m w
 writeStatefullyOrSomething a = do
@@ -132,8 +139,8 @@ commit print = do
 formatTest :: TestLocator -> Maybe Result -> UndoablePrint
 formatTest (_ /\ name) r = do
   formatTestResultIndicator r
-  name `styled` (PForeground ANSI.BrightWhite : Nil)
-  "..." `styled` (PForeground ANSI.White : Nil)
+  name `styled` testNameStyle
+  "..." `styled` Nil
   formatTestResultSuffix r
 
 formatTestResultIndicator :: Maybe Result -> UndoablePrint
@@ -154,17 +161,33 @@ formatSuite :: TestLocator -> PrettyAction
 formatSuite locator = do
   commit $ indent locator
   commit $ "Suite " `styled` Nil
-  commit $ snd locator `styled` (PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil)
+  commit $ snd locator `styled` suiteNameStyle
   commit $ ":\n" `styled` Nil
 
 formatPending :: TestLocator -> PrettyAction
 formatPending locator = do
   commit $ indent locator
-  commit $ snd locator `styled` (PForeground ANSI.BrightWhite : Nil)
+  commit $ snd locator `styled` testNameStyle
   commit $ " is unimplemented\n" `styled` (PForeground ANSI.BrightYellow : Nil)
 
 -- why do the type variables get flipped around in the docs at random...
 callOutSlowTests :: Array (Tree String Void Result) -> PrettyAction
 callOutSlowTests = traverse_ $ sequence_ <<< bimapTreeWithPaths (flip const) vibeCheck
   where vibeCheck :: NonEmptyArray String -> Result -> PrettyAction
-        vibeCheck _ _ = pure unit
+        vibeCheck shittyLocator result = case result of
+          Success Speed.Fast _ -> pure unit
+          Success Speed.Medium (Milliseconds ms) -> callOut ms $ commit $ "kinda slow!" `styled` (PForeground ANSI.BrightYellow : Nil)
+          Success Speed.Slow (Milliseconds ms) -> callOut ms $ commit $ "really slow!" `styled` (PForeground ANSI.BrightRed : Nil)
+          Failure _ -> pure unit
+        callOut :: NonEmptyArray String -> Number -> PrettyAction -> PrettyAction
+        callOut shittyLocator ms specific = do
+          commit $ "! " `styled` PForeground ANSI.Black : PBackground ANSI.Blue : Nil
+          commit $ "Test " `styled` Nil
+          let { init: path, last: name } = unsnoc shittyLocator
+          commit $ map (_ <> ".") path `styled` suiteNameStyle
+          commit $ name `styled` testNameStyle
+          commit $ " is " `styled` Nil
+          specific
+          commit $ " (" `styled` Nil
+          commit $ toStringWith (fixed 0) ms `styled` (PForeground ANSI.BrightBlue : Nil)
+          commit $ "ms)\n" `styled` Nil
