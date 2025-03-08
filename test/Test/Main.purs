@@ -23,6 +23,8 @@ main = runSpecAndExitProcess [prettyReporter] do
       describe "too deep aaa" do
         it "uhh" do
           "this" `shouldNotEqual` "that"
+    it "slow but sequential" do
+      delay $ Milliseconds 1000.0
   parallel $ describe "parallel" do
     it "1" do 1 `shouldEqual` 1
     it "2" do 1 `shouldEqual` 1

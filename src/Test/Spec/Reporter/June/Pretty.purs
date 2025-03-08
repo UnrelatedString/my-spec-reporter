@@ -71,6 +71,7 @@ update (Event.Test Sequential locator) = do
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   inPlace $ formatTest locator $ Just result
+  tellLn ""
 update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
