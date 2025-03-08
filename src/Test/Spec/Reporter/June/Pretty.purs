@@ -25,7 +25,8 @@ import Data.String as String
 import Control.Monad.State (class MonadState, StateT, get, modify)
 import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor)
 import Data.Unfoldable (replicate)
-import Data.Unfoldable.Trivial (refold) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
+import Data.Unfoldable.Trivial ((::<*>)) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
+import Data.Foldable (fold)
 import Data.List.NonEmpty (NonEmptyList(..))
 import Data.List ((:), List(Nil))
 import Data.NonEmpty (NonEmpty, (:|))
@@ -60,7 +61,7 @@ letDefaultUpdateHandleThis :: forall m. Applicative m => m Unit
 letDefaultUpdateHandleThis = pure unit
 
 update :: Event -> StateT PrettyState (Writer String) Unit
-update (Event.Start nTests) = tellLn $ "Running " <> show n <> " tests..."
+update (Event.Start nTests) = tellLn $ "Running " <> show nTests <> " tests..."
 update (Event.Suite Sequential locator) = pure unit
 update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
 update (Event.SuiteEnd locator) = pure unit
@@ -71,7 +72,7 @@ update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
 indent :: forall m. MonadTell String m => TestLocator -> m Unit
-indent (path /\ _) = refold $ replicate (Array.length path) "| "
+indent (path /\ _) = tell $ fold ::<*> replicate (Array.length path) "| "
 
 styled :: String -> NonEmpty List GraphicsParam -> String
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -81,13 +82,13 @@ clearFormatting :: String
 clearFormatting = ANSI.graphicsParamToString Reset
 
 -- Intended originally to save something to overwrite with later...
-backspace :: forall m. MonadWrite String m => m Unit -> m (m Unit)
+backspace :: forall m. MonadWriter String m => m Unit -> m (m Unit)
 backspace action = do
   _ /\ s <- listen action
-  pure $ tell $ refold $ replicate (String.length s) "\x08"
+  pure $ tell $ fold ::<*> replicate (String.length s) "\x08"
 
 -- ...but can also be contorted into overwriting something of the same length on the spot
-inPlace :: forall m. MonadWrite String m => m Unit -> m Unit
+inPlace :: forall m. MonadWriter String m => m Unit -> m Unit
 inPlace action = do
   join $ censor (const "") $ backspace action
   action
