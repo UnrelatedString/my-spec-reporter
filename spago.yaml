@@ -1,0 +1,15 @@
+package:
+  name: my-spec-reporter
+  dependencies:
+    - console
+    - effect
+    - prelude
+    - spec
+    - spec-node
+  test:
+    main: Test.Main
+    dependencies: []
+workspace:
+  packageSet:
+    registry: 63.3.0
+  extraPackages: {}
