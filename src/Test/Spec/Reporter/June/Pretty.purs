@@ -63,9 +63,8 @@ printFinishedItem locator = case _ of
     commit $ formatTest locator $ Just result
     tellLn ""
   RunningTest Nothing -> pure unit
-  RunningPending -> pure unit
+  RunningPending -> formatPending locator
   RunningSuite true -> do
-    commit $ indent locator
     formatSuite locator
   RunningSuite false -> pure unit
 
@@ -90,7 +89,7 @@ update (Event.TestEnd locator result) = do
       lift state.undoLastSequential
       commit $ formatTest locator $ Just result
       tellLn ""
-update (Event.Pending locator) = pure unit
+update (Event.Pending locator) = formatPending locator
 update (Event.End resultTrees) = defaultSummary resultTrees
 
 indent :: TestLocator -> UndoablePrint
@@ -142,7 +141,9 @@ formatTestResultIndicator = const (" " `styled` Nil) <=< case _ of
 formatTestResultSuffix :: Maybe Result -> UndoablePrint
 formatTestResultSuffix = case _ of
   Just (Success _ _) -> " passed" `styled` (PForeground ANSI.Green : Nil)
-  Just (Failure _)   -> " failed!" `styled` (PForeground ANSI.BrightRed : PMode ANSI.Underline : Nil)
+  Just (Failure _)   ->  do
+    " " `styled` Nil
+    "failed!" `styled` (PForeground ANSI.BrightRed : PMode ANSI.Underline : Nil)
   Nothing            -> pure unit
 
 formatSuite :: TestLocator -> PrettyAction
@@ -151,3 +152,9 @@ formatSuite locator = do
   commit $ "Suite " `styled` Nil
   commit $ snd locator `styled` (PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil)
   commit $ ":\n" `styled` Nil
+
+formatPending :: TestLocator -> PrettyAction
+formatPending locator = do
+  commit $ indent locator
+  commit $ snd locator `styled` (PForeground ANSI.BrightWhite : Nil)
+  commit $ " is unimplemented\n" `styled` (PForeground ANSI.BrightYellow : Nil)
