@@ -83,16 +83,18 @@ update (Event.Test Sequential locator) = do
 update (Event.Test Parallel _locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
-  lift $ state.undoLastSequential
-  commit $ formatTest locator $ Just result
-  tellLn ""
+  case Map.lookup locator state.runningItems of
+    Just _ -> letDefaultUpdateHandleThis
+    Nothing -> do
+      lift state.undoLastSequential
+      commit $ formatTest locator $ Just result
+      tellLn ""
 update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
 indent :: TestLocator -> UndoablePrint
 indent (path /\ _) = do
-  (fold ::<*> replicate (Array.length path) "  | ") `styled` (PForeground ANSI.BrightMagenta : Nil)
-  "- " `styled` Nil
+  (fold ::<*> replicate (Array.length path) "| ") `styled` (PForeground ANSI.BrightMagenta : Nil)
 
 styled :: String -> List GraphicsParam -> UndoablePrint
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -145,6 +147,7 @@ formatTestResultSuffix = case _ of
 formatSuite :: TestLocator -> PrettyAction
 formatSuite locator = do
   commit $ indent locator
+  commit $ "┌" `styled` (PForeground ANSI.BrightMagenta : Nil)
   commit $ "Suite " `styled` Nil
   commit $ snd locator `styled` (PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil)
   commit $ ":\n" `styled` Nil
