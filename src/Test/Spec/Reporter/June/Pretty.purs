@@ -71,7 +71,7 @@ update (Event.SuiteEnd locator) = pure unit
 update (Event.Test Sequential locator) = do
   indent locator
   untell <- backspace $ formatTest locator Nothing
-  modify _{undoLastSequential = untell}
+  void $ modify _{undoLastSequential = untell}
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
 update (Event.TestEnd locator result) = do
   state <- get
