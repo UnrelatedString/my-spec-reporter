@@ -64,9 +64,10 @@ printFinishedItem locator = case _ of
     tellLn ""
   RunningTest Nothing -> pure unit
   RunningPending -> pure unit
-  RunningSuite finished -> do
+  RunningSuite true -> do
     commit $ indent locator
     formatSuite locator
+  RunningSuite false -> pure unit
 
 letDefaultUpdateHandleThis :: forall m. Applicative m => m Unit
 letDefaultUpdateHandleThis = pure unit
@@ -147,7 +148,6 @@ formatTestResultSuffix = case _ of
 formatSuite :: TestLocator -> PrettyAction
 formatSuite locator = do
   commit $ indent locator
-  commit $ "┌" `styled` (PForeground ANSI.BrightMagenta : Nil)
   commit $ "Suite " `styled` Nil
   commit $ snd locator `styled` (PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil)
   commit $ ":\n" `styled` Nil
