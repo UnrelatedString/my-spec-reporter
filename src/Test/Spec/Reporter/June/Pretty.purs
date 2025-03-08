@@ -65,9 +65,12 @@ update (Event.Start nTests) = tellLn $ "Running " <> show nTests <> " tests..."
 update (Event.Suite Sequential locator) = pure unit
 update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
 update (Event.SuiteEnd locator) = pure unit
-update (Event.Test Sequential locator) = pure unit
+update (Event.Test Sequential locator) = do
+  indent locator
+  formatTest locator Nothing
 update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
-update (Event.TestEnd locator result) = pure unit
+update (Event.TestEnd locator result) = do
+  inPlace $ formatTest locator $ Just result
 update (Event.Pending locator) = pure unit
 update (Event.End resultTrees) = defaultSummary resultTrees
 
