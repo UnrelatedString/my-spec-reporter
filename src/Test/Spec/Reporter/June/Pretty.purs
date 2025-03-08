@@ -13,15 +13,22 @@ import Test.Spec.Runner (Reporter)
 import Test.Spec.Runner.Event (Event, Execution(..))
 import Test.Spec.Runner.Event as Event
 import Test.Spec.Speed as Speed
-import Test.Spec.Style (styled)
-import Test.Spec.Style as Style
 import Test.Spec.Tree (Path, Tree, TestLocator, parentSuiteName)
+import Ansi.Codes (GraphicsParam(..))
+import Ansi.Codes as ANSI
 import Data.Tuple.Nested ((/\))
 import Data.Maybe (Maybe(..))
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Array as Array
+import Data.String as String
 import Control.Monad.State (class MonadState, StateT, get, modify)
-import Control.Monad.Writer (class MonadWriter, Writer)
+import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor)
+import Data.Unfoldable (replicate)
+import Data.Unfoldable.Trivial (refold) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
+import Data.List.NonEmpty (NonEmptyList(..))
+import Data.List ((:), List(Nil))
+import Data.NonEmpty (NonEmpty, (:|))
 
 prettyReporter :: Reporter
 prettyReporter = defaultReporter initialState $ defaultUpdate
@@ -43,20 +50,58 @@ putRunningItems :: Map TestLocator RunningItem -> PrettyState -> PrettyState
 putRunningItems items state = state{ runningItems = items }
 
 printFinishedItem :: TestLocator -> RunningItem -> StateT PrettyState (Writer String) Unit
-printFinishedItem (path /\ name) = case _ of
-  RunningTest (Just result) -> tellLn $ showPN path name <> " finished with result: " <> show result
-  RunningTest Nothing -> tellLn $ showPN path name <> " didn't finish. I have no idea what this means ;_;"
-  RunningPending -> tellLn $ showPN path name <> "is pending :/"
-  RunningSuite finished -> tellLn $ showPN path name <> " finished!... " <> show finished
+printFinishedItem locator = case _ of
+  RunningTest (Just result) -> pure unit
+  RunningTest Nothing -> pure unit
+  RunningPending -> pure unit
+  RunningSuite finished -> pure unit
+
+letDefaultUpdateHandleThis :: forall m. Applicative m => m Unit
+letDefaultUpdateHandleThis = pure unit
 
 update :: Event -> StateT PrettyState (Writer String) Unit
-update = tellLn <<< show
--- update (Event.Start nTests) = pure unit
--- update (Event.Suite exec (path /\ name)) = pure unit
--- update (Event.SuiteEnd (path /\ name)) = pure unit
--- update (Event.Test exec (path /\ name)) = pure unit
--- update (Event.TestEnd (path /\ name) result) = pure unit
--- update (Event.Pending (path /\ name)) = pure unit
--- update (Event.End resultTrees) = defaultSummary resultTrees
+update (Event.Start nTests) = tellLn $ "Running " <> show n <> " tests..."
+update (Event.Suite Sequential locator) = pure unit
+update (Event.Suite Parallel locator) = letDefaultUpdateHandleThis
+update (Event.SuiteEnd locator) = pure unit
+update (Event.Test Sequential locator) = pure unit
+update (Event.Test Parallel locator) = letDefaultUpdateHandleThis
+update (Event.TestEnd locator result) = pure unit
+update (Event.Pending locator) = pure unit
+update (Event.End resultTrees) = defaultSummary resultTrees
 
-showPN path name = show path <> "." <> name
+indent :: forall m. MonadTell String m => TestLocator -> m Unit
+indent (path /\ _) = refold $ replicate (Array.length path) "| "
+
+styled :: String -> NonEmpty List GraphicsParam -> String
+-- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
+styled s = (_ <> s <> clearFormatting) <<< ANSI.escapeCodeToString <<< ANSI.Graphics <<< NonEmptyList
+
+clearFormatting :: String
+clearFormatting = ANSI.graphicsParamToString Reset
+
+-- Intended originally to save something to overwrite with later...
+backspace :: forall m. MonadWrite String m => m Unit -> m (m Unit)
+backspace action = do
+  _ /\ s <- listen action
+  pure $ tell $ refold $ replicate (String.length s) "\x08"
+
+-- ...but can also be contorted into overwriting something of the same length on the spot
+inPlace :: forall m. MonadWrite String m => m Unit -> m Unit
+inPlace action = do
+  join $ censor (const "") $ backspace action
+  action
+
+sequentialInProgress :: forall m. MonadTell String m => m Unit
+sequentialInProgress = tell " ..."
+
+formatTest :: forall m. MonadTell String m => TestLocator -> Maybe Result -> m Unit
+formatTest (_ /\ name) r = do
+  formatTestResultIndicator r
+  tell $ name `styled` (PForeground ANSI.White :| Nil)
+
+formatTestResultIndicator :: forall m. MonadTell String m => Maybe Result -> m Unit
+formatTestResultIndicator = const (tell " ") <=< tell <<< case _ of
+  Just (Success _ _) -> "✓" `styled` (PForeground ANSI.BrightGreen :| Nil)
+  Just (Failure _)   -> "✗" `styled` (PForeground ANSI.BrightRed :| PBackground ANSI.BrightWhite : Nil)
+  Nothing            -> "-" `styled` (PForeground ANSI.White :| PMode ANSI.Dim : Nil)

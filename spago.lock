@@ -6,12 +6,18 @@
         "core": {
           "dependencies": [
             "aff",
+            "ansi",
             "console",
             "datetime",
             "effect",
+            "lists",
             "prelude",
             "spec",
-            "spec-node"
+            "spec-node",
+            {
+              "trivial-unfold": ">=0.4.0 <1.0.0"
+            },
+            "unfoldable"
           ],
           "build_plan": [
             "aff",
@@ -48,6 +54,7 @@
             "invariant",
             "js-date",
             "lazy",
+            "lcg",
             "lists",
             "maybe",
             "mmorph",
@@ -72,6 +79,8 @@
             "posix-types",
             "prelude",
             "profunctor",
+            "quickcheck",
+            "random",
             "record",
             "refs",
             "safe-coerce",
@@ -81,6 +90,7 @@
             "strings",
             "tailrec",
             "transformers",
+            "trivial-unfold",
             "tuples",
             "type-equality",
             "typelevel-prelude",
@@ -1079,6 +1089,19 @@
         "prelude"
       ]
     },
+    "lcg": {
+      "type": "registry",
+      "version": "4.0.0",
+      "integrity": "sha256-h7ME5cthLfbgJOJdsZcSfFpwXsx4rf8YmhebU+3iSYg=",
+      "dependencies": [
+        "effect",
+        "integers",
+        "maybe",
+        "partial",
+        "prelude",
+        "random"
+      ]
+    },
     "lists": {
       "type": "registry",
       "version": "7.0.0",
@@ -1413,6 +1436,49 @@
         "tuples"
       ]
     },
+    "quickcheck": {
+      "type": "registry",
+      "version": "8.0.1",
+      "integrity": "sha256-ZvpccKQCvgslTXZCNmpYW4bUsFzhZd/kQUr2WmxFTGY=",
+      "dependencies": [
+        "arrays",
+        "console",
+        "control",
+        "effect",
+        "either",
+        "enums",
+        "exceptions",
+        "foldable-traversable",
+        "gen",
+        "identity",
+        "integers",
+        "lazy",
+        "lcg",
+        "lists",
+        "maybe",
+        "newtype",
+        "nonempty",
+        "numbers",
+        "partial",
+        "prelude",
+        "record",
+        "st",
+        "strings",
+        "tailrec",
+        "transformers",
+        "tuples",
+        "unfoldable"
+      ]
+    },
+    "random": {
+      "type": "registry",
+      "version": "6.0.0",
+      "integrity": "sha256-CJ611a35MPCE7XQMp0rdC6MCn76znlhisiCRgboAG+Q=",
+      "dependencies": [
+        "effect",
+        "integers"
+      ]
+    },
     "record": {
       "type": "registry",
       "version": "4.0.0",
@@ -1573,6 +1639,23 @@
         "prelude",
         "st",
         "tailrec",
+        "tuples",
+        "unfoldable"
+      ]
+    },
+    "trivial-unfold": {
+      "type": "registry",
+      "version": "0.1.1",
+      "integrity": "sha256-9xPqFssAghXVInslLhSS0al6BmiJoxRLfWsKpFvElfY=",
+      "dependencies": [
+        "bifunctors",
+        "enums",
+        "exists",
+        "foldable-traversable",
+        "maybe",
+        "newtype",
+        "prelude",
+        "quickcheck",
         "tuples",
         "unfoldable"
       ]
