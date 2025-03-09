@@ -13,7 +13,7 @@ import Test.Spec.Runner (Reporter)
 import Test.Spec.Runner.Event (Event, Execution(..))
 import Test.Spec.Runner.Event as Event
 import Test.Spec.Speed as Speed
-import Test.Spec.Tree (Path, Tree, TestLocator, bimapTreeWithPaths)
+import Test.Spec.Tree (Tree, TestLocator, bimapTreeWithPaths)
 import Ansi.Codes (GraphicsParam(..))
 import Ansi.Codes as ANSI
 import Data.Tuple (snd)
@@ -24,18 +24,19 @@ import Data.Map as Map
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray, unsnoc)
 import Data.String as String
-import Control.Monad.State (class MonadState, StateT, get, modify, put, execStateT)
-import Control.Monad.Writer (class MonadWriter, class MonadTell, Writer, tell, listen, censor, execWriter, runWriter)
+import Control.Monad.State (StateT, get, modify, put, execStateT)
+import Control.Monad.Writer (Writer, tell, runWriter)
 import Control.Monad.Trans.Class (lift)
 import Data.Unfoldable (replicate)
 import Data.Unfoldable.Trivial ((::<*>)) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
-import Data.Foldable (fold)
+import Data.Foldable (fold, foldMap)
 import Data.List.NonEmpty (NonEmptyList(..))
 import Data.List ((:), List(Nil))
-import Data.NonEmpty (NonEmpty, (:|))
+import Data.NonEmpty ((:|))
 import Data.Monoid.Additive (Additive(..))
 import Data.Traversable (traverse_, sequence_)
 import Data.Number.Format (toStringWith, fixed)
+import Data.Time.Duration (Milliseconds(..))
 
 prettyReporter :: Reporter
 prettyReporter = defaultReporter initialState $ defaultUpdate
@@ -94,7 +95,9 @@ update (Event.TestEnd locator result) = do
       tellLn ""
 update (Event.Pending locator) = formatPending locator
 update (Event.End resultTrees) = do
+  commit $ "\n================================\n\n" `styled` (PForeground ANSI.BrightWhite : PMode ANSI.Dim : Nil)
   callOutSlowTests resultTrees
+  tellLn ""
   defaultSummary resultTrees
 
 indent :: TestLocator -> UndoablePrint
@@ -176,18 +179,20 @@ callOutSlowTests = traverse_ $ sequence_ <<< bimapTreeWithPaths (flip const) vib
   where vibeCheck :: NonEmptyArray String -> Result -> PrettyAction
         vibeCheck shittyLocator result = case result of
           Success Speed.Fast _ -> pure unit
-          Success Speed.Medium (Milliseconds ms) -> callOut ms $ commit $ "kinda slow!" `styled` (PForeground ANSI.BrightYellow : Nil)
-          Success Speed.Slow (Milliseconds ms) -> callOut ms $ commit $ "really slow!" `styled` (PForeground ANSI.BrightRed : Nil)
+          Success Speed.Medium (Milliseconds ms) -> callOut shittyLocator ms do
+            commit $ "kinda slow!" `styled` (PForeground ANSI.BrightYellow : Nil)
+          Success Speed.Slow (Milliseconds ms) -> callOut shittyLocator ms do
+            commit $ "really slow!" `styled` (PForeground ANSI.BrightRed : Nil)
           Failure _ -> pure unit
         callOut :: NonEmptyArray String -> Number -> PrettyAction -> PrettyAction
         callOut shittyLocator ms specific = do
-          commit $ "! " `styled` PForeground ANSI.Black : PBackground ANSI.Blue : Nil
+          commit $ "! " `styled` (PForeground ANSI.Blue : Nil)
           commit $ "Test " `styled` Nil
           let { init: path, last: name } = unsnoc shittyLocator
-          commit $ map (_ <> ".") path `styled` suiteNameStyle
+          commit $ foldMap (_ <> ".") path `styled` suiteNameStyle
           commit $ name `styled` testNameStyle
           commit $ " is " `styled` Nil
           specific
           commit $ " (" `styled` Nil
-          commit $ toStringWith (fixed 0) ms `styled` (PForeground ANSI.BrightBlue : Nil)
+          commit $ toStringWith (fixed 0) ms `styled` (PForeground ANSI.BrightWhite : Nil)
           commit $ "ms)\n" `styled` Nil

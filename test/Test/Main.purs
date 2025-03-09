@@ -3,8 +3,8 @@ module Test.Main where
 import Prelude
 
 import Effect (Effect)
-import Test.Spec(Spec, describe, it, pending, parallel)
-import Test.Spec.Assertions (shouldEqual, shouldNotEqual, shouldSatisfy, fail, AnyShow(..))
+import Test.Spec(describe, it, pending, parallel)
+import Test.Spec.Assertions (shouldEqual, shouldNotEqual, fail)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Data.Time.Duration (Milliseconds(..))
 import Effect.Aff (delay)
