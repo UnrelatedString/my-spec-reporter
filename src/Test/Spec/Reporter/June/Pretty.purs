@@ -184,7 +184,7 @@ callOutSlowTests = traverse_ $ sequence_ <<< bimapTreeWithPaths (flip const) vib
           commit $ "Test " `styled` Nil
           let { init: path, last: name } = unsnoc shittyLocator
           commit $ foldMap (_ <> ".") path `styled` suiteNameStyle
-          commit $ name `styled` testNameStyle
+          commit $ name `styled` (PMode ANSI.Underline : testNameStyle)
           commit $ " is " `styled` Nil
           specific
           commit $ " (" `styled` Nil
