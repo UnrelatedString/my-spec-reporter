@@ -24,8 +24,8 @@ import Data.Map as Map
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray, unsnoc)
 import Data.String as String
-import Control.Monad.State (StateT, get, modify, put, execStateT)
-import Control.Monad.Writer (Writer, tell, runWriter)
+import Control.Monad.State (StateT, class MonadState, modify, get)
+import Control.Monad.Writer (Writer, WriterT, class MonadWriter, tell, execWriterT)
 import Control.Monad.Trans.Class (lift)
 import Data.Unfoldable (replicate)
 import Data.Unfoldable.Trivial ((::<*>)) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
@@ -49,7 +49,7 @@ prettyReporter = defaultReporter initialState $ defaultUpdate
 type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: Writer String Unit }
 
 type PrettyAction = StateT PrettyState (Writer String) Unit
-type UndoablePrint = StateT PrettyState (Writer (Additive Int /\ String)) Unit
+type UndoablePrint = forall m. MonadState PrettyState m => MonadWriter (Additive Int /\ String) m => m Unit
 
 initialState :: PrettyState
 initialState = { runningItems: Map.empty, undoLastSequential: pure unit }
@@ -120,23 +120,15 @@ testNameStyle = PForeground ANSI.BrightWhite : Nil
 suiteNameStyle :: List GraphicsParam
 suiteNameStyle = PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil
 
--- why do I feel like there's a way simpler canonical way to do this
-writeStatefullyOrSomething :: forall s w m. Monoid w => Monad m => StateT s (Writer w) Unit -> StateT s m w
-writeStatefullyOrSomething a = do
-  state <- get
-  let state' /\ output = runWriter $ execStateT a state
-  put state'
-  pure output
-
-backspace :: UndoablePrint -> StateT PrettyState (Writer String) (Writer String Unit)
+backspace :: forall m. MonadState PrettyState m => MonadWriter String m => WriterT (Additive Int /\ String) m Unit -> m (Writer String Unit)
 backspace print = do
-  Additive n /\ s <- writeStatefullyOrSomething print
+  Additive n /\ s <- execWriterT print
   tell s
   pure $ tell $ fold ::<*> replicate n "\x08"
 
-commit :: UndoablePrint -> PrettyAction
+commit :: forall m. MonadState PrettyState m => MonadWriter String m => WriterT (Additive Int /\ String) m Unit -> m Unit
 commit print = do
-  _ /\ s <- writeStatefullyOrSomething print
+  _ /\ s <- execWriterT print
   tell s
 
 formatTest :: TestLocator -> Maybe Result -> UndoablePrint
@@ -147,10 +139,12 @@ formatTest (_ /\ name) r = do
   formatTestResultSuffix r
 
 formatTestResultIndicator :: Maybe Result -> UndoablePrint
-formatTestResultIndicator = const (" " `styled` Nil) <=< case _ of
-  Just (Success _ _) -> "✓" `styled` (PForeground ANSI.BrightGreen : Nil)
-  Just (Failure _)   -> "✗" `styled` (PForeground ANSI.Black : PBackground ANSI.BrightRed : Nil)
-  Nothing            -> "-" `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
+formatTestResultIndicator r = do
+  case r of
+    Just (Success _ _) -> "✓" `styled` (PForeground ANSI.BrightGreen : Nil)
+    Just (Failure _)   -> "✗" `styled` (PForeground ANSI.Black : PBackground ANSI.BrightRed : Nil)
+    Nothing            -> "-" `styled` (PForeground ANSI.White : PMode ANSI.Dim : Nil)
+  " " `styled` Nil
 
 formatTestResultSuffix :: Maybe Result -> UndoablePrint
 formatTestResultSuffix = case _ of
