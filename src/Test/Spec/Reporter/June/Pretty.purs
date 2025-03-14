@@ -25,8 +25,7 @@ import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray, unsnoc)
 import Data.String as String
 import Control.Monad.State (StateT, class MonadState, modify, get)
-import Control.Monad.Writer (Writer, WriterT, class MonadWriter, tell, execWriterT)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.Writer (Writer, WriterT, class MonadWriter, class MonadTell, tell, execWriterT)
 import Data.Unfoldable (replicate)
 import Data.Unfoldable.Trivial (refold)
 import Data.Foldable (foldMap)
@@ -37,18 +36,30 @@ import Data.Monoid.Additive (Additive(..))
 import Data.Traversable (traverse_, sequence_)
 import Data.Number.Format (toStringWith, fixed)
 import Data.Time.Duration (Milliseconds(..))
+import Data.Newtype (class Newtype, unwrap)
 
 prettyReporter :: Reporter
 prettyReporter = defaultReporter initialState $ defaultUpdate
- { getRunningItems
- , printFinishedItem
+ { getRunningItems: getRunningItems
+ , printFinishedItem: (unwrap <<< _) <<< printFinishedItem
  , putRunningItems
- , update
+ , update: unwrap <<< update
  }
 
-type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: Writer String Unit }
+type PrettyState = { runningItems :: Map TestLocator RunningItem, undoLastSequential :: PrettyAction }
 
-type PrettyAction = StateT PrettyState (Writer String) Unit
+newtype PrettyM a = PrettyM (StateT PrettyState (Writer String) a)
+derive newtype instance Functor PrettyM
+derive newtype instance Apply PrettyM
+derive newtype instance Applicative PrettyM
+derive newtype instance Bind PrettyM
+derive newtype instance Monad PrettyM
+derive newtype instance MonadState PrettyState PrettyM
+derive newtype instance MonadTell String PrettyM
+derive newtype instance MonadWriter String PrettyM
+derive instance Newtype (PrettyM a) _
+
+type PrettyAction = PrettyM Unit
 type UndoablePrint = forall m. MonadState PrettyState m => MonadWriter (Additive Int /\ String) m => m Unit
 
 initialState :: PrettyState
@@ -90,7 +101,7 @@ update (Event.TestEnd locator result) = do
   case Map.lookup locator state.runningItems of
     Just _ -> letDefaultUpdateHandleThis
     Nothing -> do
-      lift state.undoLastSequential
+      state.undoLastSequential
       commit $ formatTest locator $ Just result
       tellLn ""
 update (Event.Pending locator) = formatPending locator
@@ -120,10 +131,12 @@ testNameStyle = PForeground ANSI.BrightWhite : Nil
 suiteNameStyle :: List GraphicsParam
 suiteNameStyle = PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil
 
-backspace :: forall m.
+backspace :: forall m n.
   MonadState PrettyState m =>
   MonadWriter String m =>
-  WriterT (Additive Int /\ String) m Unit -> m (Writer String Unit)
+   MonadState PrettyState n =>
+  MonadWriter String n =>
+  WriterT (Additive Int /\ String) m Unit -> m (n Unit)
 backspace print = do
   Additive n /\ s <- execWriterT print
   tell s
