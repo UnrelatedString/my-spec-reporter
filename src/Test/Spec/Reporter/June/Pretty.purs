@@ -28,8 +28,8 @@ import Control.Monad.State (StateT, class MonadState, modify, get)
 import Control.Monad.Writer (Writer, WriterT, class MonadWriter, tell, execWriterT)
 import Control.Monad.Trans.Class (lift)
 import Data.Unfoldable (replicate)
-import Data.Unfoldable.Trivial ((::<*>)) -- ...I sure hope this cyclical dependency isn't a problem if it's only for testing
-import Data.Foldable (fold, foldMap)
+import Data.Unfoldable.Trivial (refold)
+import Data.Foldable (foldMap)
 import Data.List.NonEmpty (NonEmptyList(..))
 import Data.List ((:), List(Nil))
 import Data.NonEmpty ((:|))
@@ -102,7 +102,7 @@ update (Event.End resultTrees) = do
 
 indent :: TestLocator -> UndoablePrint
 indent (path /\ _) = do
-  (fold ::<*> replicate (Array.length path) "| ") `styled` (PForeground ANSI.BrightMagenta : Nil)
+  (refold $ replicate (Array.length path) "| ") `styled` (PForeground ANSI.BrightMagenta : Nil)
 
 styled :: String -> List GraphicsParam -> UndoablePrint
 -- fortunately the associativity of (<>) happens to be defined to make this legal LMAO
@@ -120,13 +120,19 @@ testNameStyle = PForeground ANSI.BrightWhite : Nil
 suiteNameStyle :: List GraphicsParam
 suiteNameStyle = PForeground ANSI.BrightCyan : PMode ANSI.Italic : Nil
 
-backspace :: forall m. MonadState PrettyState m => MonadWriter String m => WriterT (Additive Int /\ String) m Unit -> m (Writer String Unit)
+backspace :: forall m.
+  MonadState PrettyState m =>
+  MonadWriter String m =>
+  WriterT (Additive Int /\ String) m Unit -> m (Writer String Unit)
 backspace print = do
   Additive n /\ s <- execWriterT print
   tell s
-  pure $ tell $ fold ::<*> replicate n "\x08"
+  pure $ tell $ refold $ replicate n "\x08"
 
-commit :: forall m. MonadState PrettyState m => MonadWriter String m => WriterT (Additive Int /\ String) m Unit -> m Unit
+commit :: forall m.
+  MonadState PrettyState m =>
+  MonadWriter String m =>
+  WriterT (Additive Int /\ String) m Unit -> m Unit
 commit print = do
   _ /\ s <- execWriterT print
   tell s
