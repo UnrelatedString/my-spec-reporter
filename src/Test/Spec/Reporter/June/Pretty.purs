@@ -1,6 +1,6 @@
 module Test.Spec.Reporter.June.Pretty
- ( prettyReporter
- ) where
+  ( prettyReporter
+  ) where
 
 -- heavily based on https://github.com/purescript-spec/purescript-spec/blob/v8.1.1/src/Test/Spec/Reporter/Spec.purs
 
